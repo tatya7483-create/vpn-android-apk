@@ -24,22 +24,21 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: '11076708'
 
       - name: Install Android SDK components
         run: |
           yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install \
             "platforms;android-34" \
             "build-tools;34.0.0" \
             "platform-tools"
-          echo "Installed SDK components:"
-          ls $ANDROID_SDK_ROOT/platforms/
-          ls $ANDROID_SDK_ROOT/build-tools/
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "SDK contents:"
+          ls $ANDROID_SDK_ROOT/
+          ls $ANDROID_SDK_ROOT/platforms/ 2>/dev/null || echo "no platforms dir"
+          ls $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null || echo "no build-tools dir"
 
       - name: Install Gradle
-        working-directory: android
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle.zip
           sudo unzip -q /tmp/gradle.zip -d /opt/
@@ -49,14 +48,14 @@ jobs:
       - name: Build Release APK
         working-directory: android
         run: |
-          gradle assembleRelease --no-daemon 2>&1 | tail -60
-          echo "APK built:"
+          gradle assembleRelease --no-daemon --stacktrace 2>&1 | tail -80
+          echo "=== APK built ==="
           find app/build -name "*.apk" -type f
 
       - name: Prepare dist
         run: |
           mkdir -p dist
-          cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/VpnShare.apk || exit 1
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/VpnShare.apk
           ls -la dist/
 
       - uses: actions/upload-artifact@v4
@@ -81,9 +80,7 @@ jobs:
           WINTUN_VER="0.14.1"
           echo "Downloading wintun.dll v${WINTUN_VER}..."
           WINTUN_DLL=""
-          for url in \
-            "https://www.wintun.net/builds/wintun-${WINTUN_VER}.zip"; do
-            echo "Trying $url ..."
+          for url in "https://www.wintun.net/builds/wintun-${WINTUN_VER}.zip"; do
             if curl -fsSL "$url" -o /tmp/wintun.zip --max-time 60; then
               rm -rf /tmp/wintun/
               mkdir -p /tmp/wintun/
@@ -92,9 +89,8 @@ jobs:
                 if [ -z "$CANDIDATE" ]; then
                   CANDIDATE=$(find /tmp/wintun -name "wintun.dll" | head -1)
                 fi
-                if [ -n "$CANDIDATE" ] && [ -f "$CANDIDATE" ] && [ $(stat -c%s "$CANDIDATE" 2>/dev/null || echo 0) -gt 10000 ]; then
+                if [ -n "$CANDIDATE" ] && [ -f "$CANDIDATE" ] && [ $(stat -c%s "$CANDIDATE") -gt 10000 ]; then
                   WINTUN_DLL="$CANDIDATE"
-                  echo "Found wintun.dll at $CANDIDATE ($(stat -c%s "$CANDIDATE") bytes)"
                   break
                 fi
               fi
@@ -105,7 +101,6 @@ jobs:
             exit 1
           fi
           cp "$WINTUN_DLL" pc/core/res/wintun.dll
-          echo "wintun.dll: $(ls -la pc/core/res/wintun.dll)"
 
       - name: Get Go dependencies
         working-directory: pc
@@ -115,29 +110,23 @@ jobs:
 
       - name: Go vet (Windows target)
         working-directory: pc
-        run: |
-          GOOS=windows GOARCH=amd64 go vet ./...
+        run: GOOS=windows GOARCH=amd64 go vet ./...
 
       - name: Build Windows GUI binary
         working-directory: pc
         run: |
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-            go build -ldflags "-s -w -H windowsgui" \
-            -o ../dist/VpnShare.exe .
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w -H windowsgui" -o ../dist/VpnShare.exe .
           ls -la ../dist/VpnShare.exe
 
       - name: Build Windows console binary
         working-directory: pc
         run: |
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-            go build -ldflags "-s -w" \
-            -o ../dist/VpnShare-console.exe .
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o ../dist/VpnShare-console.exe .
 
       - name: Copy wintun.dll to dist
         run: |
           mkdir -p dist
           cp pc/core/res/wintun.dll dist/wintun.dll
-          ls -la dist/
 
       - uses: actions/upload-artifact@v4
         with:
@@ -155,14 +144,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: List artifacts
-        run: find artifacts -type f -ls
-
       - name: Package release
         run: |
           mkdir -p release
@@ -171,9 +155,7 @@ jobs:
           cp artifacts/pc-windows/VpnShare-console.exe release/
           cp artifacts/pc-windows/wintun.dll release/
           cp README.md release/
-          ls -la release/
           cd release && zip -r ../VpnShare-v${GITHUB_REF#refs/tags/v}.zip .
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -183,5 +165,3 @@ jobs:
             release/VpnShare-console.exe
             release/wintun.dll
             VpnShare-v*.zip
-          draft: false
-          prerelease: false
