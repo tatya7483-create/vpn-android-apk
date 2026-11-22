@@ -42,7 +42,7 @@ jobs:
       - name: Build Release APK
         working-directory: android
         run: |
-          gradle assembleRelease --no-daemon
+          gradle assembleRelease --no-daemon --stacktrace 2>&1 | tail -100
           echo "APK built:"
           find app/build -name "*.apk" -type f
 
