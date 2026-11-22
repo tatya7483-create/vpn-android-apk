@@ -24,38 +24,25 @@ jobs:
 
       - name: Setup Android SDK
         run: |
-          # GitHub runners have Android SDK at $ANDROID_HOME (usually /usr/local/lib/android/sdk)
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls "$ANDROID_HOME" 2>/dev/null || echo "ANDROID_HOME not set, using default path"
           export ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          # Install required SDK components
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
-            "platform-tools" 2>&1 | tail -20
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools"
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
-          echo "=== SDK platforms ==="
-          ls "$ANDROID_SDK_ROOT/platforms/"
-          echo "=== Build tools ==="
-          ls "$ANDROID_SDK_ROOT/build-tools/"
 
-      - name: Install Gradle
-        run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle.zip
-          sudo unzip -q /tmp/gradle.zip -d /opt/
-          sudo ln -sf /opt/gradle-8.5/bin/gradle /usr/local/bin/gradle
-          cd android && gradle wrapper --gradle-version 8.5
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
 
       - name: Build Release APK
         working-directory: android
         run: |
+          gradle wrapper --gradle-version 8.5 2>&1 | tail -5
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tail -100
+          ./gradlew assembleRelease --no-daemon 2>&1 | tail -80
           echo "=== APK built ==="
           find app/build -name "*.apk" -type f
 
@@ -111,9 +98,7 @@ jobs:
 
       - name: Build Windows GUI binary
         working-directory: pc
-        run: |
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w -H windowsgui" -o ../dist/VpnShare.exe .
-          ls -la ../dist/VpnShare.exe
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w -H windowsgui" -o ../dist/VpnShare.exe .
 
       - name: Build Windows console binary
         working-directory: pc
