@@ -63,7 +63,7 @@ func NewTCPTracker(ft *FullTunnel) *TCPTracker {
 	}
 }
 
-func (t *TCPTracker) HandlePacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, flags byte, data []byte, opts []byte) {
+func (t *TCPTracker) HandlePacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, flags byte, data []byte) {
 	key := connKey{srcIP.String(), srcPort, dstIP.String(), dstPort}
 
 	t.mu.Lock()

@@ -159,9 +159,8 @@ func (ft *FullTunnel) cleanup() {
 		ft.udpTracker.Close()
 		ft.udpTracker = nil
 	}
-	if ft.sessionStarted && ft.session != nil {
+	if ft.sessionStarted {
 		ft.session.End()
-		ft.session = nil
 		ft.sessionStarted = false
 	}
 	ft.closeAdapter()
@@ -185,12 +184,10 @@ func (ft *FullTunnel) readLoop(ctx context.Context) {
 
 		pkt, err := ft.session.ReceivePacket()
 		if err != nil {
-			if err == wintun.ErrRateDropException {
-				time.Sleep(time.Millisecond)
-				continue
-			}
-			// Try other error names
-			if err.Error() == "Write packet failed due to rate limit, try later" {
+			// Rate limit errors are transient; just wait and retry
+			if errStr := err.Error(); errStr == "Write packet failed due to rate limit, try later" ||
+				errStr == "Dropping packet due to rate limit" ||
+				errStr == "Receive packet failed due to rate limit, try later" {
 				time.Sleep(time.Millisecond)
 				continue
 			}
