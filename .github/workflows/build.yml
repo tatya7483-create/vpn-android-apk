@@ -41,10 +41,17 @@ jobs:
         working-directory: android
         shell: bash
         run: |
-          set -o pipefail
-          gradle wrapper --gradle-version 8.5 2>&1 | tail -5
+          gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon 2>&1 | tail -100
+          set +e
+          ./gradlew assembleRelease --no-daemon --console=plain > /tmp/gradle.log 2>&1
+          GRADLE_EXIT=$?
+          echo "=== Gradle exited with code: $GRADLE_EXIT ==="
+          tail -200 /tmp/gradle.log
+          if [ $GRADLE_EXIT -ne 0 ]; then
+            echo "=== BUILD FAILED ==="
+            exit $GRADLE_EXIT
+          fi
           echo "=== APK built ==="
           find app/build -name "*.apk" -type f
 
