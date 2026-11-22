@@ -33,6 +33,7 @@ type FullTunnel struct {
 
 	adapter         *wintun.Adapter
 	session         wintun.Session
+	sessionStarted  bool
 	socks           *proxy.Socks5Client
 	fakeDNS         *FakeDNS
 	tcpTracker      *TCPTracker
@@ -96,11 +97,12 @@ func (ft *FullTunnel) Start() error {
 		log.Printf("Предупреждение: настройка адаптера: %v", err)
 	}
 
-	ft.session, err = ft.adapter.StartSession(0x400000) // 4MB ring buffer
+	ft.session, err = ft.adapter.StartSession(0x400000)
 	if err != nil {
 		ft.closeAdapter()
 		return fmt.Errorf("запустить сессию TUN: %w", err)
 	}
+	ft.sessionStarted = true
 
 	ft.tcpTracker = NewTCPTracker(ft)
 	ft.udpTracker = NewUDPTracker(ft)
@@ -157,9 +159,10 @@ func (ft *FullTunnel) cleanup() {
 		ft.udpTracker.Close()
 		ft.udpTracker = nil
 	}
-	if ft.session != nil {
+	if ft.sessionStarted && ft.session != nil {
 		ft.session.End()
 		ft.session = nil
+		ft.sessionStarted = false
 	}
 	ft.closeAdapter()
 }
@@ -182,7 +185,12 @@ func (ft *FullTunnel) readLoop(ctx context.Context) {
 
 		pkt, err := ft.session.ReceivePacket()
 		if err != nil {
-			if err == wintun.ErrTransactionRateExceeded {
+			if err == wintun.ErrRateDropException {
+				time.Sleep(time.Millisecond)
+				continue
+			}
+			// Try other error names
+			if err.Error() == "Write packet failed due to rate limit, try later" {
 				time.Sleep(time.Millisecond)
 				continue
 			}
@@ -207,8 +215,6 @@ func (ft *FullTunnel) handlePacket(pkt []byte) {
 	switch version {
 	case 4:
 		ft.handleIPv4(pkt)
-	case 6:
-		// IPv6 - drop for now (most VPNs work with IPv4)
 	}
 }
 
@@ -234,17 +240,17 @@ func (ft *FullTunnel) handleIPv4(pkt []byte) {
 	payload := pkt[ihl:]
 
 	switch proto {
-	case 6: // TCP
+	case 6:
 		if len(payload) < 20 {
 			return
 		}
 		ft.handleTCPv4(srcIP, dstIP, payload)
-	case 17: // UDP
+	case 17:
 		if len(payload) < 8 {
 			return
 		}
 		ft.handleUDPv4(srcIP, dstIP, payload)
-	case 1: // ICMP
+	case 1:
 		if len(payload) < 8 {
 			return
 		}
@@ -262,11 +268,9 @@ func (ft *FullTunnel) handleTCPv4(srcIP, dstIP net.IP, payload []byte) {
 		return
 	}
 	flags := payload[13]
-	tcpOpts := payload[20:dataOff]
 	tcpData := payload[dataOff:]
-	_ = tcpOpts
 
-	ft.tcpTracker.HandlePacket(srcIP, dstIP, srcPort, dstPort, seqNum, ackNum, flags, tcpData, nil)
+	ft.tcpTracker.HandlePacket(srcIP, dstIP, srcPort, dstPort, seqNum, ackNum, flags, tcpData)
 }
 
 func (ft *FullTunnel) handleUDPv4(srcIP, dstIP net.IP, payload []byte) {
@@ -291,7 +295,7 @@ func (ft *FullTunnel) handleUDPv4(srcIP, dstIP net.IP, payload []byte) {
 
 func (ft *FullTunnel) handleICMPv4(pkt []byte, srcIP, dstIP net.IP, payload []byte) {
 	icmpType := payload[0]
-	if icmpType == 8 { // Echo request
+	if icmpType == 8 {
 		tunNetIP := net.ParseIP(tunIP)
 		tunGwIP := net.ParseIP(tunGateway)
 		if dstIP.Equal(tunNetIP) || dstIP.Equal(tunGwIP) {
@@ -300,13 +304,12 @@ func (ft *FullTunnel) handleICMPv4(pkt []byte, srcIP, dstIP net.IP, payload []by
 			copy(reply[12:16], dstIP.To4())
 			copy(reply[16:20], srcIP.To4())
 			replyIHL := int(reply[0]&0x0F) * 4
-			reply[replyIHL] = 0 // Echo reply
+			reply[replyIHL] = 0
 			icmpPayload := reply[replyIHL:]
 			icmpPayload[2] = 0
 			icmpPayload[3] = 0
-			binary.BigEndian.PutUint16(icmpPayload[2:4], 0)
 			recalculateIPv4Checksum(reply)
-			csum := icmpChecksum(icmpPayload)
+			csum := ipChecksum(icmpPayload)
 			binary.BigEndian.PutUint16(icmpPayload[2:4], csum)
 			ft.sendPacket(reply)
 		}
@@ -332,10 +335,10 @@ func (ft *FullTunnel) sendTCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16
 	ip[1] = 0x00
 	totalLen := uint16(20 + tcpHdrLen + len(data))
 	binary.BigEndian.PutUint16(ip[2:4], totalLen)
-	binary.BigEndian.PutUint16(ip[4:6], 0x1337) // ID
-	binary.BigEndian.PutUint16(ip[6:8], 0x4000) // Don't fragment
+	binary.BigEndian.PutUint16(ip[4:6], 0x1337)
+	binary.BigEndian.PutUint16(ip[6:8], 0x4000)
 	ip[8] = 64
-	ip[9] = 6 // TCP
+	ip[9] = 6
 	copy(ip[12:16], srcIP.To4())
 	copy(ip[16:20], dstIP.To4())
 	recalculateIPv4Checksum(ip)
@@ -421,20 +424,6 @@ func ipChecksum(data []byte) uint16 {
 	return ^uint16(sum)
 }
 
-func icmpChecksum(data []byte) uint16 {
-	sum := uint32(0)
-	for i := 0; i < len(data)-1; i += 2 {
-		sum += uint32(binary.BigEndian.Uint16(data[i : i+2]))
-	}
-	if len(data)%2 == 1 {
-		sum += uint32(data[len(data)-1]) << 8
-	}
-	for sum>>16 != 0 {
-		sum = (sum & 0xFFFF) + (sum >> 16)
-	}
-	return ^uint16(sum)
-}
-
 func tcpChecksum(src, dst net.IP, protocol byte, tcpSeg []byte) uint16 {
 	pseudo := make([]byte, 12)
 	copy(pseudo[0:4], src.To4())
@@ -453,12 +442,10 @@ func tcpChecksum(src, dst net.IP, protocol byte, tcpSeg []byte) uint16 {
 
 func isAdmin() bool {
 	var token windows.Token
-	pseudoHandle := windows.Handle(^uintptr(0)) // GetCurrentProcess pseudo-handle (-1)
+	pseudoHandle := windows.Handle(^uintptr(0))
 	if err := windows.OpenProcessToken(pseudoHandle, windows.TOKEN_QUERY, &token); err != nil {
 		return false
 	}
 	defer token.Close()
 	return token.IsElevated()
 }
-
-

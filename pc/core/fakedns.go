@@ -6,8 +6,7 @@ import (
 	"sync"
 )
 
-// FakeDNS maps domain names to fake IP addresses in the 198.18.0.0/15 range
-// (reserved for benchmarking, commonly used by VPN/tunneling software).
+// FakeDNS maps domain names to fake IP addresses in the 198.18.0.0/15 range.
 type FakeDNS struct {
 	mu         sync.RWMutex
 	domainToIP map[string]net.IP
@@ -19,12 +18,10 @@ func NewFakeDNS() *FakeDNS {
 	return &FakeDNS{
 		domainToIP: make(map[string]net.IP),
 		ipToDomain: make(map[string]string),
-		// Start at 198.18.0.2
-		nextIP: uint32(198)<<24 | uint32(18)<<16 | 0<<8 | 2,
+		nextIP:     uint32(198)<<24 | uint32(18)<<16 | 0<<8 | 2,
 	}
 }
 
-// Lookup returns the domain for a fake IP, if any.
 func (f *FakeDNS) Lookup(ip net.IP) (string, bool) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -32,7 +29,6 @@ func (f *FakeDNS) Lookup(ip net.IP) (string, bool) {
 	return domain, ok
 }
 
-// Register registers a domain and returns its fake IP.
 func (f *FakeDNS) Register(domain string) net.IP {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -59,7 +55,7 @@ func (f *FakeDNS) fakeDNSReply(query []byte) []byte {
 		return nil
 	}
 
-	txID := query[0:2]
+	_ = query[0:2] // txID (kept for reference)
 	qdcount := binary.BigEndian.Uint16(query[4:6])
 	if qdcount == 0 {
 		return nil
@@ -90,10 +86,10 @@ func (f *FakeDNS) fakeDNSReply(query []byte) []byte {
 	}
 	qtype := binary.BigEndian.Uint16(query[pos : pos+2])
 
-	if qtype != 1 { // Only handle A records
+	if qtype != 1 {
 		resp := make([]byte, len(query))
 		copy(resp, query)
-		binary.BigEndian.PutUint16(resp[2:4], 0x8103) // NXDOMAIN
+		binary.BigEndian.PutUint16(resp[2:4], 0x8103)
 		binary.BigEndian.PutUint16(resp[6:8], 0)
 		return resp
 	}
@@ -102,13 +98,12 @@ func (f *FakeDNS) fakeDNSReply(query []byte) []byte {
 
 	resp := make([]byte, pos+16)
 	copy(resp, query)
-	binary.BigEndian.PutUint16(resp[2:4], 0x8180) // Standard response
+	binary.BigEndian.PutUint16(resp[2:4], 0x8180)
 	binary.BigEndian.PutUint16(resp[4:6], qdcount)
-	binary.BigEndian.PutUint16(resp[6:8], 1) // ANCOUNT=1
+	binary.BigEndian.PutUint16(resp[6:8], 1)
 	binary.BigEndian.PutUint16(resp[8:10], 0)
 	binary.BigEndian.PutUint16(resp[10:12], 0)
 
-	// Answer: name pointer, type A, class IN, TTL, RDLEN, RDATA
 	resp[pos] = 0xC0
 	resp[pos+1] = 0x0C
 	binary.BigEndian.PutUint16(resp[pos+2:pos+4], 1)

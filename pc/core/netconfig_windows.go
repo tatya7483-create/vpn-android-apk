@@ -33,9 +33,7 @@ func configureTUNAdapter(adapter *wintun.Adapter, ip, subnet, gateway, dns strin
 	// Add static ARP/neighbor entry for the gateway to avoid ARP timeouts
 	cmd = exec.Command("netsh", "interface", "ipv4", "add", "neighbors",
 		ifName, gateway, "00-00-00-00-00-01")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		// Non-fatal
-	}
+	cmd.CombinedOutput() // Non-fatal
 
 	// Also add neighbor for the TUN IP itself
 	cmd = exec.Command("netsh", "interface", "ipv4", "add", "neighbors",
