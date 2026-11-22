@@ -23,38 +23,39 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK components
         run: |
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install \
+          # GitHub runners have Android SDK at $ANDROID_HOME (usually /usr/local/lib/android/sdk)
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls "$ANDROID_HOME" 2>/dev/null || echo "ANDROID_HOME not set, using default path"
+          export ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          # Install required SDK components
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install \
             "platforms;android-34" \
             "build-tools;34.0.0" \
-            "platform-tools"
+            "platform-tools" 2>&1 | tail -20
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "=== local.properties ==="
-          cat android/local.properties
+          echo "=== SDK platforms ==="
+          ls "$ANDROID_SDK_ROOT/platforms/"
+          echo "=== Build tools ==="
+          ls "$ANDROID_SDK_ROOT/build-tools/"
 
-      - name: Install Gradle and generate wrapper
+      - name: Install Gradle
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle.zip
           sudo unzip -q /tmp/gradle.zip -d /opt/
           sudo ln -sf /opt/gradle-8.5/bin/gradle /usr/local/bin/gradle
-          cd android
-          gradle wrapper --gradle-version 8.5
-          ls -la gradle/wrapper/
-          ls -la gradlew
+          cd android && gradle wrapper --gradle-version 8.5
 
       - name: Build Release APK
         working-directory: android
         run: |
           chmod +x gradlew
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
-          export ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT
-          ./gradlew assembleRelease --no-daemon 2>&1 | tail -80
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tail -100
           echo "=== APK built ==="
           find app/build -name "*.apk" -type f
 
@@ -84,35 +85,25 @@ jobs:
           set -e
           mkdir -p pc/core/res
           WINTUN_VER="0.14.1"
-          echo "Downloading wintun.dll v${WINTUN_VER}..."
           WINTUN_DLL=""
           for url in "https://www.wintun.net/builds/wintun-${WINTUN_VER}.zip"; do
             if curl -fsSL "$url" -o /tmp/wintun.zip --max-time 60; then
-              rm -rf /tmp/wintun/
-              mkdir -p /tmp/wintun/
+              rm -rf /tmp/wintun/ && mkdir -p /tmp/wintun/
               if unzip -o /tmp/wintun.zip -d /tmp/wintun/ 2>/dev/null; then
                 CANDIDATE=$(find /tmp/wintun -name "wintun.dll" -path "*amd64*" | head -1)
-                if [ -z "$CANDIDATE" ]; then
-                  CANDIDATE=$(find /tmp/wintun -name "wintun.dll" | head -1)
-                fi
+                [ -z "$CANDIDATE" ] && CANDIDATE=$(find /tmp/wintun -name "wintun.dll" | head -1)
                 if [ -n "$CANDIDATE" ] && [ -f "$CANDIDATE" ] && [ $(stat -c%s "$CANDIDATE") -gt 10000 ]; then
-                  WINTUN_DLL="$CANDIDATE"
-                  break
+                  WINTUN_DLL="$CANDIDATE"; break
                 fi
               fi
             fi
           done
-          if [ -z "$WINTUN_DLL" ]; then
-            echo "ERROR: Could not download wintun.dll"
-            exit 1
-          fi
+          [ -z "$WINTUN_DLL" ] && echo "ERROR: wintun.dll download failed" && exit 1
           cp "$WINTUN_DLL" pc/core/res/wintun.dll
 
       - name: Get Go dependencies
         working-directory: pc
-        run: |
-          go mod tidy
-          go mod download
+        run: go mod tidy && go mod download
 
       - name: Go vet (Windows target)
         working-directory: pc
@@ -126,13 +117,10 @@ jobs:
 
       - name: Build Windows console binary
         working-directory: pc
-        run: |
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o ../dist/VpnShare-console.exe .
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o ../dist/VpnShare-console.exe .
 
       - name: Copy wintun.dll to dist
-        run: |
-          mkdir -p dist
-          cp pc/core/res/wintun.dll dist/wintun.dll
+        run: mkdir -p dist && cp pc/core/res/wintun.dll dist/wintun.dll
 
       - uses: actions/upload-artifact@v4
         with:
