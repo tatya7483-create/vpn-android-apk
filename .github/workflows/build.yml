@@ -44,16 +44,29 @@ jobs:
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
           set +e
-          ./gradlew assembleRelease --no-daemon --console=plain > /tmp/gradle.log 2>&1
-          GRADLE_EXIT=$?
+          ./gradlew assembleRelease --no-daemon --console=plain --info 2>&1 | tee /tmp/gradle.log | grep -E "FAIL|error:|e: |FAILED|BUILD FAILURE|What went wrong|Caused by|exception|Cannot|Unresolved|^> |Task :" | head -100
+          GRADLE_EXIT=${PIPESTATUS[0]}
+          echo ""
           echo "=== Gradle exited with code: $GRADLE_EXIT ==="
-          tail -200 /tmp/gradle.log
           if [ $GRADLE_EXIT -ne 0 ]; then
-            echo "=== BUILD FAILED ==="
+            echo ""
+            echo "=== Last 150 lines of log ==="
+            tail -150 /tmp/gradle.log
+            echo ""
+            echo "=== Error lines ==="
+            grep -nE "e: |error:|FAIL|exception" /tmp/gradle.log | head -50
+            cp /tmp/gradle.log /home/runner/work/vpn-android-apk/vpn-android-apk/gradle-build.log
             exit $GRADLE_EXIT
           fi
           echo "=== APK built ==="
           find app/build -name "*.apk" -type f
+
+      - name: Upload gradle log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-log
+          path: gradle-build.log
 
       - name: Prepare dist
         run: |
