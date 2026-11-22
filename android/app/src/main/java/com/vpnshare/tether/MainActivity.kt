@@ -121,7 +121,7 @@ class MainActivity : AppCompatActivity() {
             binding.tvStatus.text = "${getString(R.string.status_error)}: $error"
             binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.red))
             binding.btnStartStop.text = getString(R.string.btn_start)
-            binding.btnStartStop.backgroundTintList = ContextCompat.getColorStateList(this, R.color.green)
+            binding.btnStartStop.backgroundTintList = ContextCompat.getColorStateList(this, R.color.green)!!
             binding.btnCheckVpn.isEnabled = false
             binding.cardInfo.visibility = android.view.View.GONE
             return
@@ -130,7 +130,7 @@ class MainActivity : AppCompatActivity() {
             binding.tvStatus.text = getString(R.string.status_running)
             binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.green))
             binding.btnStartStop.text = getString(R.string.btn_stop)
-            binding.btnStartStop.backgroundTintList = ContextCompat.getColorStateList(this, R.color.red)
+            binding.btnStartStop.backgroundTintList = ContextCompat.getColorStateList(this, R.color.red)!!
             binding.btnCheckVpn.isEnabled = true
             binding.cardInfo.visibility = android.view.View.VISIBLE
             updateIpDisplay()
@@ -138,7 +138,7 @@ class MainActivity : AppCompatActivity() {
             binding.tvStatus.text = getString(R.string.status_stopped)
             binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.red))
             binding.btnStartStop.text = getString(R.string.btn_start)
-            binding.btnStartStop.backgroundTintList = ContextCompat.getColorStateList(this, R.color.green)
+            binding.btnStartStop.backgroundTintList = ContextCompat.getColorStateList(this, R.color.green)!!
             binding.btnCheckVpn.isEnabled = false
             binding.cardInfo.visibility = android.view.View.GONE
         }

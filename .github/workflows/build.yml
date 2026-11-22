@@ -32,23 +32,29 @@ jobs:
             "platforms;android-34" \
             "build-tools;34.0.0" \
             "platform-tools"
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "SDK contents:"
-          ls $ANDROID_SDK_ROOT/
-          ls $ANDROID_SDK_ROOT/platforms/ 2>/dev/null || echo "no platforms dir"
-          ls $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null || echo "no build-tools dir"
+          echo "=== local.properties ==="
+          cat android/local.properties
 
-      - name: Install Gradle
+      - name: Install Gradle and generate wrapper
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle.zip
           sudo unzip -q /tmp/gradle.zip -d /opt/
           sudo ln -sf /opt/gradle-8.5/bin/gradle /usr/local/bin/gradle
-          gradle --version
+          cd android
+          gradle wrapper --gradle-version 8.5
+          ls -la gradle/wrapper/
+          ls -la gradlew
 
       - name: Build Release APK
         working-directory: android
         run: |
-          gradle assembleRelease --no-daemon --stacktrace 2>&1 | tail -80
+          chmod +x gradlew
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT
+          ./gradlew assembleRelease --no-daemon 2>&1 | tail -80
           echo "=== APK built ==="
           find app/build -name "*.apk" -type f
 
