@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'arena/**'
+      - 'main'
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -76,22 +80,32 @@ jobs:
         run: |
           set -e
           mkdir -p pc/core/res
-          # Download from wintun.net
           WINTUN_VER="0.14.1"
           echo "Downloading wintun.dll v${WINTUN_VER}..."
-          curl -fsSL "https://www.wintun.net/builds/wintun-${WINTUN_VER}.zip" -o /tmp/wintun.zip || {
-            echo "wintun.net failed, trying alternative..."
-            exit 1
-          }
-          unzip -o /tmp/wintun.zip -d /tmp/wintun/
-          # Find the amd64 DLL
-          WINTUN_DLL=$(find /tmp/wintun -name "wintun.dll" | grep -i amd64 | head -1)
+          # Try multiple sources
+          WINTUN_DLL=""
+          for url in \
+            "https://www.wintun.net/builds/wintun-${WINTUN_VER}.zip" \
+            "https://codeload.github.com/nicocha30/wintun/zip/refs/heads/master"; do
+            echo "Trying $url ..."
+            if curl -fsSL "$url" -o /tmp/wintun.zip --max-time 60; then
+              rm -rf /tmp/wintun/
+              mkdir -p /tmp/wintun/
+              if unzip -o /tmp/wintun.zip -d /tmp/wintun/ 2>/dev/null; then
+                CANDIDATE=$(find /tmp/wintun -name "wintun.dll" -path "*amd64*" | head -1)
+                if [ -z "$CANDIDATE" ]; then
+                  CANDIDATE=$(find /tmp/wintun -name "wintun.dll" | head -1)
+                fi
+                if [ -n "$CANDIDATE" ] && [ -f "$CANDIDATE" ] && [ $(stat -c%s "$CANDIDATE") -gt 10000 ]; then
+                  WINTUN_DLL="$CANDIDATE"
+                  echo "Found wintun.dll at $CANDIDATE ($(stat -c%s "$CANDIDATE") bytes)"
+                  break
+                fi
+              fi
+            fi
+          done
           if [ -z "$WINTUN_DLL" ]; then
-            WINTUN_DLL=$(find /tmp/wintun -name "wintun.dll" | head -1)
-          fi
-          if [ -z "$WINTUN_DLL" ] || [ ! -f "$WINTUN_DLL" ]; then
-            echo "ERROR: Could not find wintun.dll"
-            find /tmp/wintun -name "*.dll" -ls
+            echo "ERROR: Could not download wintun.dll"
             exit 1
           fi
           cp "$WINTUN_DLL" pc/core/res/wintun.dll
@@ -102,6 +116,14 @@ jobs:
         run: |
           go mod tidy
           go mod download
+
+      - name: Go vet
+        working-directory: pc
+        run: |
+          echo "=== Linux vet ==="
+          GOOS=linux GOARCH=amd64 go vet ./...
+          echo "=== Windows vet (checks cross-compilation) ==="
+          GOOS=windows GOARCH=amd64 go vet ./...
 
       - name: Build Windows binary
         working-directory: pc
