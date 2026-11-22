@@ -1,0 +1,189 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-8.5-${{ hashFiles('android/**/*.gradle.kts') }}
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: '34.0.0'
+
+      - name: Accept Android licenses
+        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Install Gradle
+        working-directory: android
+        run: |
+          # Download and install Gradle 8.5
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle.zip
+          sudo unzip -q /tmp/gradle.zip -d /opt/
+          sudo ln -sf /opt/gradle-8.5/bin/gradle /usr/local/bin/gradle
+          gradle --version
+
+      - name: Build Release APK
+        working-directory: android
+        run: |
+          gradle assembleRelease --no-daemon
+          echo "APK built:"
+          find app/build -name "*.apk" -type f
+
+      - name: Prepare dist
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/VpnShare.apk
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: dist/VpnShare.apk
+
+  build-pc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Download wintun.dll
+        run: |
+          set -e
+          mkdir -p pc/core/res
+          # Download from wintun.net
+          WINTUN_VER="0.14.1"
+          echo "Downloading wintun.dll v${WINTUN_VER}..."
+          curl -fsSL "https://www.wintun.net/builds/wintun-${WINTUN_VER}.zip" -o /tmp/wintun.zip || {
+            echo "wintun.net failed, trying alternative..."
+            exit 1
+          }
+          unzip -o /tmp/wintun.zip -d /tmp/wintun/
+          # Find the amd64 DLL
+          WINTUN_DLL=$(find /tmp/wintun -name "wintun.dll" | grep -i amd64 | head -1)
+          if [ -z "$WINTUN_DLL" ]; then
+            WINTUN_DLL=$(find /tmp/wintun -name "wintun.dll" | head -1)
+          fi
+          if [ -z "$WINTUN_DLL" ] || [ ! -f "$WINTUN_DLL" ]; then
+            echo "ERROR: Could not find wintun.dll"
+            find /tmp/wintun -name "*.dll" -ls
+            exit 1
+          fi
+          cp "$WINTUN_DLL" pc/core/res/wintun.dll
+          echo "wintun.dll: $(ls -la pc/core/res/wintun.dll)"
+
+      - name: Get Go dependencies
+        working-directory: pc
+        run: |
+          go mod tidy
+          go mod download
+
+      - name: Build Windows binary
+        working-directory: pc
+        run: |
+          # Cross-compile for windows/amd64
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+            go build -ldflags "-s -w -H windowsgui" \
+            -o ../dist/VpnShare.exe .
+          ls -la ../dist/VpnShare.exe
+
+      - name: Also build console version (for debugging)
+        working-directory: pc
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+            go build -ldflags "-s -w" \
+            -o ../dist/VpnShare-console.exe .
+
+      - name: Copy wintun.dll to dist
+        run: |
+          mkdir -p dist
+          cp pc/core/res/wintun.dll dist/wintun.dll
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pc-windows
+          path: |
+            dist/VpnShare.exe
+            dist/VpnShare-console.exe
+            dist/wintun.dll
+
+  release:
+    needs: [build-android, build-pc]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f -ls
+
+      - name: Package release
+        run: |
+          mkdir -p release
+          cp artifacts/android-apk/VpnShare.apk release/
+          cp artifacts/pc-windows/VpnShare.exe release/
+          cp artifacts/pc-windows/VpnShare-console.exe release/
+          cp artifacts/pc-windows/wintun.dll release/
+          cp README.md release/
+          ls -la release/
+          cd release && zip -r ../VpnShare-v${GITHUB_REF#refs/tags/v}.zip .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/VpnShare.apk
+            release/VpnShare.exe
+            release/VpnShare-console.exe
+            release/wintun.dll
+            VpnShare-v*.zip
+          draft: false
+          prerelease: false
+          body: |
+            ## VPN Share — совместное использование VPN через USB
+
+            ### Установка
+            1. Установите **VpnShare.apk** на телефон (включите установку из неизвестных источников)
+            2. Включите **USB-модем** в настройках Android
+            3. Подключите телефон к ПК кабелем USB
+            4. Запустите приложение VPN Share на телефоне и нажмите «Запустить»
+            5. Скопируйте **VpnShare.exe** и **wintun.dll** в одну папку на ПК
+            6. Запустите **VpnShare.exe** (для полного туннеля от имени администратора)
+
+            ### Файлы
+            - `VpnShare.apk` — Android-приложение
+            - `VpnShare.exe` — Windows-клиент (с иконкой в трее)
+            - `VpnShare-console.exe` — Консольная версия (для отладки)
+            - `wintun.dll` — TUN-драйвер (нужен для режима полного туннеля)

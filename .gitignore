@@ -1,0 +1,31 @@
+# Android build artifacts
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/**/captures/
+*.apk
+*.aab
+
+# Go build artifacts
+/dist/
+*.exe
+# Do not ignore wintun.dll which is embedded in the binary
+!pc/core/res/wintun.dll
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gradle
+android/gradle/wrapper/gradle-wrapper.jar
+!android/gradle/wrapper/gradle-wrapper.properties
+/gradlew
+/gradlew.bat

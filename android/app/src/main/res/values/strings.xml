@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">VPN Share</string>
+    <string name="btn_start">Запустить</string>
+    <string name="btn_stop">Остановить</string>
+    <string name="btn_check_vpn">Проверить VPN</string>
+    <string name="status_stopped">Прокси остановлен</string>
+    <string name="status_starting">Запуск…</string>
+    <string name="status_running">Прокси запущен</string>
+    <string name="status_stopping">Остановка…</string>
+    <string name="status_error">Ошибка</string>
+    <string name="vpn_on">VPN активен</string>
+    <string name="vpn_off">VPN выключен</string>
+    <string name="checking">Проверка…</string>
+    <string name="ip_label">IP телефона для ПК:</string>
+    <string name="socks_port_label">SOCKS5 порт:</string>
+    <string name="http_port_label">HTTP порт:</string>
+    <string name="vpn_check_result">Результат проверки:</string>
+    <string name="notification_channel">VPN Share — прокси</string>
+    <string name="notification_text">Прокси работает. Нажмите для управления.</string>
+</resources>
