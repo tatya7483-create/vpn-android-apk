@@ -26,10 +26,17 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           cmdline-tools-version: '11076708'
-          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
 
-      - name: Accept Android licenses
-        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+      - name: Install Android SDK components
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "platform-tools"
+          echo "Installed SDK components:"
+          ls $ANDROID_SDK_ROOT/platforms/
+          ls $ANDROID_SDK_ROOT/build-tools/
 
       - name: Install Gradle
         working-directory: android
@@ -42,14 +49,14 @@ jobs:
       - name: Build Release APK
         working-directory: android
         run: |
-          gradle assembleRelease --no-daemon --stacktrace 2>&1 | tail -100
+          gradle assembleRelease --no-daemon 2>&1 | tail -60
           echo "APK built:"
           find app/build -name "*.apk" -type f
 
       - name: Prepare dist
         run: |
           mkdir -p dist
-          cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/VpnShare.apk
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/VpnShare.apk || exit 1
           ls -la dist/
 
       - uses: actions/upload-artifact@v4
@@ -75,8 +82,7 @@ jobs:
           echo "Downloading wintun.dll v${WINTUN_VER}..."
           WINTUN_DLL=""
           for url in \
-            "https://www.wintun.net/builds/wintun-${WINTUN_VER}.zip" \
-            "https://codeload.github.com/WireGuard/wintun/zip/refs/tags/v${WINTUN_VER}"; do
+            "https://www.wintun.net/builds/wintun-${WINTUN_VER}.zip"; do
             echo "Trying $url ..."
             if curl -fsSL "$url" -o /tmp/wintun.zip --max-time 60; then
               rm -rf /tmp/wintun/
@@ -179,12 +185,3 @@ jobs:
             VpnShare-v*.zip
           draft: false
           prerelease: false
-          body: |
-            ## VPN Share — совместное использование VPN через USB
-
-            ### Установка
-            1. Установите **VpnShare.apk** на телефон
-            2. Включите USB-модем, подключите кабель
-            3. Запустите VPN Share на телефоне, нажмите «Запустить»
-            4. Скопируйте **VpnShare.exe** и **wintun.dll** в одну папку на ПК
-            5. Запустите **VpnShare.exe** (для полного туннеля от имени администратора)
