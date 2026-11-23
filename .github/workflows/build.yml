@@ -60,7 +60,11 @@ jobs:
       - name: Prepare dist
         run: |
           mkdir -p dist
-          cp android/app/build/outputs/apk/release/*.apk dist/VpnShare.apk
+          echo "=== Looking for APK ==="
+          find android -name "*.apk" -type f
+          APK_PATH=$(find android -name "*.apk" -path "*release*" -type f | head -1)
+          echo "Found APK at: $APK_PATH"
+          cp "$APK_PATH" dist/VpnShare.apk
           ls -la dist/
 
       - uses: actions/upload-artifact@v4
