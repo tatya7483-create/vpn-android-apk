@@ -58,12 +58,14 @@ jobs:
         run: |
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls -la local.properties gradlew
+          echo "::warning::pwd=$(pwd) ANDROID_HOME=$ANDROID_HOME"
+          echo "::warning::Files: $(ls -la | head -10 | tr '\n' ' ')"
+          echo "::warning::gradlew exists: $(test -f gradlew && echo yes || echo no), executable: $(test -x gradlew && echo yes || echo no)"
+          chmod +x gradlew
           echo "=== Running gradle... ==="
           ./gradlew assembleDebug --no-daemon --stacktrace > /tmp/g.log 2>&1
           EXIT=$?
-          echo "GRADLE_EXIT=$EXIT"
+          echo "::warning::Gradle exit: $EXIT, log size: $(wc -c < /tmp/g.log) bytes, lines: $(wc -l < /tmp/g.log)"
           echo "=== TAIL 50 ==="
           tail -50 /tmp/g.log
           if [ $EXIT -ne 0 ]; then
