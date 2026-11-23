@@ -28,50 +28,42 @@ jobs:
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "Using ANDROID_HOME=$ANDROID_HOME"
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools"
-          echo "SDK components installed"
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools" 2>&1 | tail -10
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.5'
 
-      - name: Build APK
+      - name: Generate gradle wrapper
+        working-directory: android
+        run: |
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
+
+      - name: Compile debug Kotlin
         working-directory: android
         run: |
           export ANDROID_HOME=$ANDROID_SDK_ROOT
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          gradle wrapper --gradle-version 8.5
-          chmod +x gradlew
-          set +e
-          ./gradlew assembleDebug --no-daemon > ../gradle-build.log 2>&1
-          EXIT=$?
-          echo "==== Gradle exit: $EXIT ===="
-          echo "==== ERROR LINES ===="
-          grep -nE "^e: |^error:|FAILED|BUILD FAILED|FAILURE:|What went wrong|Caused by:|Exception|Could not|Unresolved|^> " ../gradle-build.log | head -40
-          echo "==== TAIL ===="
-          tail -30 ../gradle-build.log
-          exit $EXIT
+          ./gradlew compileDebugKotlin --no-daemon --console=plain 2>&1 | tail -60
 
-      - name: Copy APK to dist
-        if: success()
+      - name: Build Debug APK
+        working-directory: android
+        run: |
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          ./gradlew assembleDebug --no-daemon --console=plain 2>&1 | tail -80
+          echo "=== APK built ==="
+          find app/build -name "*.apk" -type f
+
+      - name: Prepare dist
         run: |
           mkdir -p dist
-          cp android/app/build/outputs/apk/debug/app-debug.apk dist/VpnShare.apk
+          cp android/app/build/outputs/apk/debug/*.apk dist/VpnShare.apk
           ls -la dist/
 
-      - name: Upload build log (always)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-build-log
-          path: gradle-build.log
-          if-no-files-found: ignore
-
       - uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: android-apk
           path: dist/VpnShare.apk
