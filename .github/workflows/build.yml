@@ -28,30 +28,48 @@ jobs:
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "Using ANDROID_HOME=$ANDROID_HOME"
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools" 2>&1 | tail -5
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+          echo "SDK components installed"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.5'
 
-      - name: Build debug APK
+      - name: Build APK
         working-directory: android
         run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           export ANDROID_HOME=$ANDROID_SDK_ROOT
-          gradle assembleDebug --no-daemon --console=plain
-          echo "=== Build outputs ==="
-          find app/build -name "*.apk" -type f
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
+          set +e
+          ./gradlew assembleDebug --no-daemon > ../gradle-build.log 2>&1
+          EXIT=$?
+          echo "Gradle exit: $EXIT"
+          echo "==== Log tail ===="
+          tail -50 ../gradle-build.log
+          exit $EXIT
 
-      - name: Prepare dist
+      - name: Copy APK to dist
+        if: success()
         run: |
           mkdir -p dist
           cp android/app/build/outputs/apk/debug/app-debug.apk dist/VpnShare.apk
           ls -la dist/
 
+      - name: Upload build log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: gradle-build.log
+          if-no-files-found: ignore
+
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: android-apk
           path: dist/VpnShare.apk
