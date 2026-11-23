@@ -58,14 +58,21 @@ jobs:
         run: |
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          ./gradlew assembleDebug --no-daemon > /tmp/g.log 2>&1
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls -la local.properties gradlew
+          echo "=== Running gradle... ==="
+          ./gradlew assembleDebug --no-daemon --stacktrace > /tmp/g.log 2>&1
           EXIT=$?
-          tail -100 /tmp/g.log
           echo "GRADLE_EXIT=$EXIT"
+          echo "=== TAIL 50 ==="
+          tail -50 /tmp/g.log
           if [ $EXIT -ne 0 ]; then
-            echo "::error::BUILD FAILED checking log for errors..."
-            grep -m 5 "^e: " /tmp/g.log | while IFS= read -r l; do echo "::error::$l"; done
-            grep -m 5 "FAILED\|BUILD FAILED\|What went wrong\|Could not\|Unresolved" /tmp/g.log | while IFS= read -r l; do echo "::error::$l"; done
+            echo "::error::BUILD FAILED (exit code $EXIT)"
+            echo "::error::Log size: $(wc -l < /tmp/g.log) lines, $(wc -c < /tmp/g.log) bytes"
+            # Show all lines containing common error keywords
+            grep -iE "error|failed|failure|exception|could not|unresolved|what went wrong" /tmp/g.log | head -15 | while IFS= read -r l; do
+              echo "::error::$l"
+            done
             exit $EXIT
           fi
           echo "===== SUCCESS ====="
