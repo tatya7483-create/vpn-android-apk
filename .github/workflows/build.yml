@@ -47,15 +47,17 @@ jobs:
         working-directory: android
         run: |
           export ANDROID_HOME=$ANDROID_SDK_ROOT
-          ./gradlew compileDebugKotlin --no-daemon --console=plain 2>&1 | tail -60
+          ./gradlew compileDebugKotlin --no-daemon --console=plain
 
       - name: Build Debug APK
         working-directory: android
         run: |
           export ANDROID_HOME=$ANDROID_SDK_ROOT
-          ./gradlew assembleDebug --no-daemon --console=plain 2>&1 | tail -80
-          echo "=== APK built ==="
+          ./gradlew assembleDebug --no-daemon --console=plain
+          echo "=== APK files ==="
           find app/build -name "*.apk" -type f
+          echo "=== outputs dir ==="
+          ls -la app/build/outputs/apk/debug/ 2>&1
 
       - name: Prepare dist
         run: |
