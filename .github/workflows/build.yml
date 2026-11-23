@@ -48,9 +48,11 @@ jobs:
           set +e
           ./gradlew assembleDebug --no-daemon > ../gradle-build.log 2>&1
           EXIT=$?
-          echo "Gradle exit: $EXIT"
-          echo "==== Log tail ===="
-          tail -50 ../gradle-build.log
+          echo "==== Gradle exit: $EXIT ===="
+          echo "==== ERROR LINES ===="
+          grep -nE "^e: |^error:|FAILED|BUILD FAILED|FAILURE:|What went wrong|Caused by:|Exception|Could not|Unresolved|^> " ../gradle-build.log | head -40
+          echo "==== TAIL ===="
+          tail -30 ../gradle-build.log
           exit $EXIT
 
       - name: Copy APK to dist
