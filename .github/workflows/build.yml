@@ -39,27 +39,38 @@ jobs:
       - name: Build APK and prepare dist
         shell: bash
         run: |
-          set -x
           cd android
+          echo "=== Step 1: Generate wrapper ==="
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          # Ensure debug keystore exists
+          echo "=== Step 2: Ensure debug keystore ==="
           mkdir -p ~/.android
           if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" > /dev/null 2>&1
+            keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
+          echo "=== Step 3: Set local.properties ==="
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          cat local.properties
+          echo "=== Step 4: Run gradle build ==="
           export ANDROID_HOME=$ANDROID_SDK_ROOT
-          ./gradlew assembleRelease --no-daemon --console=plain 2>&1 | tail -40
-          echo "=== Build done, looking for APKs ==="
+          ./gradlew assembleRelease --no-daemon --console=plain
+          GRADLE_EXIT=$?
+          echo "Gradle exit code: $GRADLE_EXIT"
+          echo "=== Step 5: Find APK ==="
           pwd
-          ls -la app/build/outputs/apk/release/ 2>&1 || echo "no release dir"
-          find app/build -name "*.apk" -type f
-          mkdir -p ../dist
+          ls -laR app/build/outputs/ 2>&1 | head -100
           APK_PATH=$(find app/build -name "*.apk" -type f | head -1)
           echo "APK_PATH=$APK_PATH"
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: No APK found after build!"
+            find app/build -type f | head -50
+            exit 1
+          fi
+          echo "=== Step 6: Copy to dist ==="
+          mkdir -p ../dist
           cp "$APK_PATH" ../dist/VpnShare.apk
           ls -la ../dist/
+          if [ $GRADLE_EXIT -ne 0 ]; then exit $GRADLE_EXIT; fi
 
       - uses: actions/upload-artifact@v4
         with:
