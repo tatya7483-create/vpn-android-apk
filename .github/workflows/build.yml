@@ -37,29 +37,38 @@ jobs:
         with:
           gradle-version: '8.5'
 
+      - name: Check tools
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "JAVA_HOME=$JAVA_HOME"
+          ls "$ANDROID_SDK_ROOT/platforms/" 2>&1
+          ls "$ANDROID_SDK_ROOT/build-tools/" 2>&1
+          which gradle && gradle --version 2>&1 | head -5
+
+      - name: Generate wrapper
+        working-directory: android
+        run: |
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
+          ls -la gradlew gradle/wrapper/
+
       - name: Build debug APK
         working-directory: android
         run: |
           export ANDROID_HOME=$ANDROID_SDK_ROOT
-          gradle assembleDebug --no-daemon --console=plain > /tmp/g.log 2>&1
-          EXIT=$?
-          echo "GRADLE EXIT: $EXIT"
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/g.log | head -200
+          EXIT=${PIPESTATUS[0]}
+          echo "GRADLE_EXIT=$EXIT"
           if [ $EXIT -ne 0 ]; then
-            # Emit errors as workflow annotations (first 10 only)
-            LINE_NUM=1
-            while IFS= read -r line; do
-              if [ $LINE_NUM -le 10 ]; then
-                echo "::error::$line"
-                LINE_NUM=$((LINE_NUM+1))
-              fi
-            done < <(grep -iE "^e:|^error:|FAILED|BUILD FAILED|FAILURE:|What went wrong|Could not|Unresolved|Execution failed|exception" /tmp/g.log | head -10)
-            echo "----- LAST 50 LINES -----"
-            tail -50 /tmp/g.log
+            echo "::error::BUILD FAILED checking log for errors..."
+            grep -m 5 "^e: " /tmp/g.log | while IFS= read -r l; do echo "::error::$l"; done
+            grep -m 5 "FAILED\|BUILD FAILED\|What went wrong\|Could not\|Unresolved" /tmp/g.log | while IFS= read -r l; do echo "::error::$l"; done
             exit $EXIT
           fi
           echo "===== SUCCESS ====="
           find app/build -name "*.apk" -type f
-          ls -la app/build/outputs/apk/debug/
 
       - name: Prepare dist
         if: success()
