@@ -14,10 +14,11 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
     permissions:
-      issues: write
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -48,10 +49,20 @@ jobs:
           EXIT=$?
           echo "GRADLE EXIT: $EXIT"
           if [ $EXIT -ne 0 ]; then
-            echo "===== ERROR LINES ====="
-            grep -iE "^e:|^error:|\<FAILED\>|BUILD FAILED|FAILURE:|What went wrong|Caused by|Could not|Unresolved|Execution failed|exception|\* What went" /tmp/g.log | head -20 || true
-            echo "===== LAST 40 LINES ====="
-            tail -40 /tmp/g.log
+            # Save error log to a file in repo
+            cd $GITHUB_WORKSPACE
+            echo "BUILD FAILED on $(date)" > BUILD_ERROR.txt
+            echo "" >> BUILD_ERROR.txt
+            echo "=== ERROR LINES ===" >> BUILD_ERROR.txt
+            grep -iE "^e:|^error:|FAILED|BUILD FAILED|FAILURE:|What went wrong|Caused by|Could not|Unresolved|Execution failed|exception|^\\* What went" /tmp/g.log | head -30 >> BUILD_ERROR.txt
+            echo "" >> BUILD_ERROR.txt
+            echo "=== TAIL 80 ===" >> BUILD_ERROR.txt
+            tail -80 /tmp/g.log >> BUILD_ERROR.txt
+            git config user.name "CI Bot"
+            git config user.email "ci@bot.local"
+            git add BUILD_ERROR.txt
+            git commit -m "Add build error log for debugging [skip ci]"
+            git push origin HEAD:${{ github.head_ref || github.ref_name }} 2>&1 || echo "Push failed"
             exit $EXIT
           fi
           echo "===== SUCCESS ====="
