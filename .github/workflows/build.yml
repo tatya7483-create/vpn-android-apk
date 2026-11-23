@@ -38,14 +38,10 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
         run: |
-          gradle wrapper --gradle-version 8.5
-          chmod +x gradlew
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           export ANDROID_HOME=$ANDROID_SDK_ROOT
-          ./gradlew assembleDebug --no-daemon --console=plain
+          gradle assembleDebug --no-daemon --console=plain
           echo "=== Build outputs ==="
           find app/build -name "*.apk" -type f
 
