@@ -2,7 +2,6 @@ package com.vpnshare.tether
 
 import android.util.Log
 import kotlinx.coroutines.*
-import kotlin.coroutines.currentCoroutineContext
 import java.io.*
 import java.net.*
 
@@ -193,7 +192,8 @@ class HttpProxy(private val port: Int) {
     private suspend fun relay(src: InputStream, dst: OutputStream) {
         val buf = ByteArray(BUF_SIZE)
         try {
-            while (currentCoroutineContext().isActive) {
+            while (true) {
+                ensureActive()
                 val n = withContext(Dispatchers.IO) {
                     try { src.read(buf) } catch (_: Exception) { -1 }
                 }
@@ -202,6 +202,8 @@ class HttpProxy(private val port: Int) {
                     try { dst.write(buf, 0, n); dst.flush() } catch (_: Exception) {}
                 }
             }
+        } catch (_: CancellationException) {
+            // Normal cancellation
         } catch (_: Exception) {}
     }
 
