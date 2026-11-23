@@ -212,7 +212,7 @@ class Socks5Proxy(private val port: Int) {
         val buf = ByteArray(BUF_SIZE)
         try {
             while (true) {
-                ensureActive()
+                yield()
                 val n = withContext(Dispatchers.IO) {
                     try { src.read(buf) } catch (_: Exception) { -1 }
                 }
@@ -221,8 +221,6 @@ class Socks5Proxy(private val port: Int) {
                     try { dst.write(buf, 0, n); dst.flush() } catch (_: Exception) {}
                 }
             }
-        } catch (_: CancellationException) {
-            // Normal cancellation
         } catch (_: Exception) {}
     }
 

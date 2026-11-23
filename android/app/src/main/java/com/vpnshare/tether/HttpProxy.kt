@@ -193,7 +193,7 @@ class HttpProxy(private val port: Int) {
         val buf = ByteArray(BUF_SIZE)
         try {
             while (true) {
-                ensureActive()
+                yield()
                 val n = withContext(Dispatchers.IO) {
                     try { src.read(buf) } catch (_: Exception) { -1 }
                 }
@@ -202,8 +202,6 @@ class HttpProxy(private val port: Int) {
                     try { dst.write(buf, 0, n); dst.flush() } catch (_: Exception) {}
                 }
             }
-        } catch (_: CancellationException) {
-            // Normal cancellation
         } catch (_: Exception) {}
     }
 
@@ -222,8 +220,8 @@ class HttpProxy(private val port: Int) {
         while (true) {
             val c = stream.read()
             if (c == -1) return if (sb.isEmpty()) null else sb.toString()
-            if (c == '\n') {
-                if (prev == '\r') sb.deleteCharAt(sb.length - 1)
+            if (c == '\n'.code) {
+                if (prev == '\r'.code) sb.deleteCharAt(sb.length - 1)
                 return sb.toString()
             }
             sb.append(c.toChar())
