@@ -71,6 +71,14 @@ jobs:
           echo "===== SUCCESS ====="
           find app/build -name "*.apk" -type f
 
+      - name: Upload gradle log always
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gradle-log
+          path: /tmp/g.log
+          if-no-files-found: ignore
+
       - name: Prepare dist
         if: success()
         run: |
