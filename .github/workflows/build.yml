@@ -37,30 +37,23 @@ jobs:
         with:
           gradle-version: '8.5'
 
-      - name: Generate gradle wrapper
-        working-directory: android
-        run: |
-          gradle wrapper --gradle-version 8.5
-          chmod +x gradlew
-
       - name: Build debug APK
         working-directory: android
         run: |
           export ANDROID_HOME=$ANDROID_SDK_ROOT
-          ./gradlew assembleDebug --no-daemon --console=plain > /tmp/g.log 2>&1
+          echo "=== env ==="
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "JAVA_HOME=$JAVA_HOME"
+          which gradle
+          gradle --version
+          gradle assembleDebug --no-daemon --console=plain > /tmp/g.log 2>&1
           EXIT=$?
+          echo "GRADLE EXIT CODE: $EXIT"
           if [ $EXIT -ne 0 ]; then
-            echo "GRADLE EXIT CODE: $EXIT"
-            # Print first 5 Kotlin errors as workflow annotations
-            grep -m 5 "^e: " /tmp/g.log | while IFS= read -r line; do
-              echo "::error::$line"
-            done
-            # Also print what went wrong section
-            grep -A 5 "What went wrong" /tmp/g.log | head -20
-            # Print FAILED tasks
-            grep "FAILED" /tmp/g.log | head -10
-            echo "=== TAIL ==="
-            tail -40 /tmp/g.log
+            echo "=== ERROR PATTERNS ==="
+            grep -iE "error|fail|exception|could not|unresolved|what went wrong|caused by|e:" /tmp/g.log | head -40
+            echo "=== LAST 60 LINES ==="
+            tail -60 /tmp/g.log
             exit $EXIT
           fi
           echo "=== GRADLE SUCCEEDED ==="
