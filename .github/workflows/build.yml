@@ -54,16 +54,26 @@ jobs:
         run: |
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           ./gradlew assembleRelease --no-daemon --console=plain 2>&1 | tail -80
-          echo "=== APK built ==="
+          echo "=== APK built (in android/) ==="
           find app/build -name "*.apk" -type f
+          echo "=== Full build outputs ==="
+          find app/build/outputs -type f
 
       - name: Prepare dist
         run: |
           mkdir -p dist
-          echo "=== Looking for APK ==="
-          find android -name "*.apk" -type f
-          APK_PATH=$(find android -name "*.apk" -path "*release*" -type f | head -1)
-          echo "Found APK at: $APK_PATH"
+          echo "=== Looking for APK (pwd=$(pwd)) ==="
+          find . -name "*.apk" -type f
+          echo "=== Looking in android/app/build ==="
+          ls -la android/app/build/outputs/ 2>&1 || echo "no outputs dir"
+          find android/app/build -type f -name "*.apk" 2>&1
+          APK_PATH=$(find android/app/build -name "*.apk" -type f | head -1)
+          echo "APK_PATH=$APK_PATH"
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            echo "ERROR: APK not found! Checking build directory contents..."
+            find android/app/build -maxdepth 5 -type d
+            exit 1
+          fi
           cp "$APK_PATH" dist/VpnShare.apk
           ls -la dist/
 
