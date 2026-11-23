@@ -58,8 +58,9 @@ jobs:
         run: |
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/g.log | head -200
-          EXIT=${PIPESTATUS[0]}
+          ./gradlew assembleDebug --no-daemon > /tmp/g.log 2>&1
+          EXIT=$?
+          tail -100 /tmp/g.log
           echo "GRADLE_EXIT=$EXIT"
           if [ $EXIT -ne 0 ]; then
             echo "::error::BUILD FAILED checking log for errors..."
