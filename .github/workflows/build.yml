@@ -56,25 +56,21 @@ jobs:
       - name: Build debug APK
         working-directory: android
         run: |
+          set +e
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "::warning::pwd=$(pwd) ANDROID_HOME=$ANDROID_HOME"
-          echo "::warning::Files: $(ls -la | head -10 | tr '\n' ' ')"
-          echo "::warning::gradlew exists: $(test -f gradlew && echo yes || echo no), executable: $(test -x gradlew && echo yes || echo no)"
           chmod +x gradlew
-          echo "=== Running gradle... ==="
+          echo "::warning::Starting gradle build..."
           ./gradlew assembleDebug --no-daemon --stacktrace > /tmp/g.log 2>&1
           EXIT=$?
-          echo "::warning::Gradle exit: $EXIT, log size: $(wc -c < /tmp/g.log) bytes, lines: $(wc -l < /tmp/g.log)"
-          echo "=== TAIL 50 ==="
-          tail -50 /tmp/g.log
+          echo "::warning::Gradle exit: $EXIT, log bytes: $(wc -c < /tmp/g.log), lines: $(wc -l < /tmp/g.log)"
           if [ $EXIT -ne 0 ]; then
             echo "::error::BUILD FAILED (exit code $EXIT)"
-            echo "::error::Log size: $(wc -l < /tmp/g.log) lines, $(wc -c < /tmp/g.log) bytes"
-            # Show all lines containing common error keywords
-            grep -iE "error|failed|failure|exception|could not|unresolved|what went wrong" /tmp/g.log | head -15 | while IFS= read -r l; do
+            grep -iE "^e:|^error:|failure|failed|exception|could not|unresolved|what went wrong|caused by|execution failed" /tmp/g.log | head -15 | while IFS= read -r l; do
               echo "::error::$l"
             done
+            echo "------ LAST 30 LINES ------"
+            tail -30 /tmp/g.log
             exit $EXIT
           fi
           echo "===== SUCCESS ====="
