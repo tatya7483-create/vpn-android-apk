@@ -50,11 +50,17 @@ jobs:
           ./gradlew assembleDebug --no-daemon --console=plain > /tmp/g.log 2>&1
           EXIT=$?
           if [ $EXIT -ne 0 ]; then
-            echo "=== GRADLE FAILED (exit $EXIT) ==="
-            echo "=== ERROR LINES ==="
-            grep -nE "^e: |error:|FAILED|BUILD FAILED|FAILURE:|What went wrong|Caused by:|Exception|Could not|Unresolved|^> |^\* What went wrong" /tmp/g.log | head -50
+            echo "GRADLE EXIT CODE: $EXIT"
+            # Print first 5 Kotlin errors as workflow annotations
+            grep -m 5 "^e: " /tmp/g.log | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            # Also print what went wrong section
+            grep -A 5 "What went wrong" /tmp/g.log | head -20
+            # Print FAILED tasks
+            grep "FAILED" /tmp/g.log | head -10
             echo "=== TAIL ==="
-            tail -60 /tmp/g.log
+            tail -40 /tmp/g.log
             exit $EXIT
           fi
           echo "=== GRADLE SUCCEEDED ==="
