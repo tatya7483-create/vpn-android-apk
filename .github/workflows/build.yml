@@ -29,7 +29,7 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools" 2>&1 | tail -10
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
 
       - name: Setup Gradle
@@ -37,46 +37,30 @@ jobs:
         with:
           gradle-version: '8.5'
 
-      - name: Build Release APK
+      - name: Generate gradle wrapper
         working-directory: android
-        shell: bash
         run: |
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          set +e
-          ./gradlew assembleRelease --no-daemon --console=plain --info 2>&1 | tee /tmp/gradle.log | grep -E "FAIL|error:|e: |FAILED|BUILD FAILURE|What went wrong|Caused by|exception|Cannot|Unresolved|^> |Task :" | head -100
-          GRADLE_EXIT=${PIPESTATUS[0]}
-          echo ""
-          echo "=== Gradle exited with code: $GRADLE_EXIT ==="
-          if [ $GRADLE_EXIT -ne 0 ]; then
-            echo ""
-            echo "=== Last 150 lines of log ==="
-            tail -150 /tmp/gradle.log
-            echo ""
-            echo "=== Error lines ==="
-            grep -nE "e: |error:|FAIL|exception" /tmp/gradle.log | head -50
-            cp /tmp/gradle.log /home/runner/work/vpn-android-apk/vpn-android-apk/gradle-build.log
-            exit $GRADLE_EXIT
-          fi
+
+      - name: Compile debug Kotlin (to catch errors)
+        working-directory: android
+        run: |
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          ./gradlew compileDebugKotlin --no-daemon --console=plain 2>&1 | tail -60
+
+      - name: Build Release APK
+        working-directory: android
+        run: |
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          ./gradlew assembleRelease --no-daemon --console=plain 2>&1 | tail -80
           echo "=== APK built ==="
           find app/build -name "*.apk" -type f
-
-      - name: Upload gradle log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-log
-          path: gradle-build.log
 
       - name: Prepare dist
         run: |
           mkdir -p dist
-          find android/app/build -name "*.apk" -type f
-          cp android/app/build/outputs/apk/release/*.apk dist/VpnShare.apk || {
-            echo "Release APK not found at expected path; searching..."
-            find android -name "*.apk" -type f
-            exit 1
-          }
+          cp android/app/build/outputs/apk/release/*.apk dist/VpnShare.apk
           ls -la dist/
 
       - uses: actions/upload-artifact@v4
