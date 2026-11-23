@@ -38,18 +38,32 @@ jobs:
           gradle-version: '8.5'
 
       - name: Build debug APK
+        id: build
         working-directory: android
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           gradle assembleDebug --no-daemon --console=plain > /tmp/g.log 2>&1
           EXIT=$?
           echo "Gradle exit: $EXIT"
           if [ $EXIT -ne 0 ]; then
-            echo "=== ERRORS ==="
-            cat /tmp/g.log | grep -iE "^e:|^error:|FAILED|BUILD FAILED|FAILURE:|What went wrong|Caused by|Could not|Unresolved|Execution failed|exception" | head -30
-            echo ""
-            echo "=== TAIL 80 ==="
-            tail -80 /tmp/g.log
+            ERR_FILE=/tmp/errors.txt
+            echo "## Kotlin/Gradle Build Errors" > $ERR_FILE
+            echo "" >> $ERR_FILE
+            echo '```' >> $ERR_FILE
+            grep -iE "^e:|^error:|FAILED|BUILD FAILED|FAILURE:|What went wrong|Caused by|Could not|Unresolved|Execution failed|exception|^>" /tmp/g.log | head -30 >> $ERR_FILE
+            echo '```' >> $ERR_FILE
+            echo "" >> $ERR_FILE
+            echo "## Last 80 lines" >> $ERR_FILE
+            echo "" >> $ERR_FILE
+            echo '```' >> $ERR_FILE
+            tail -80 /tmp/g.log >> $ERR_FILE
+            echo '```' >> $ERR_FILE
+            cat $ERR_FILE
+            # Create issue with errors
+            TITLE="Build error on $(date +%Y-%m-%d)"
+            gh issue create --title "$TITLE" --body-file $ERR_FILE  2>&1 || echo "Could not create issue"
             exit $EXIT
           fi
           echo "=== SUCCESS ==="
